@@ -22,12 +22,18 @@ class NodeTest {
   @:variant(this.parallel, (this.message.length + this.echoer.length) * this.total)
   public function echo(fn:Int->Promise<Int>, expected:Int) {
     return Server.bind(3000).next(server -> {
+      var echoed = 0;
       server.connected.handle(function (cnx) {
-        (echoer:RealSource).append(cnx.source).pipeTo(cnx.sink, {end: true}).eager();
+        (echoer:RealSource).append(cnx.source).pipeTo(cnx.sink, {end: true})
+          .handle(function(v) {
+            asserts.assert(v.match(AllWritten));
+            echoed++;
+          });
       });
       
       fn(total)
         .next(length -> {
+          asserts.assert(echoed == total);
           asserts.assert(length == expected);
           server.close();
         })
