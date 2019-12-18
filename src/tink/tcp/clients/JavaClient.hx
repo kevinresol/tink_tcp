@@ -20,8 +20,6 @@ class JavaClient implements Client {
   }
 }
 
-
-
 private class ConnectedHandler implements CompletionHandler<java.lang.Void, AsynchronousSocketChannel>  {
   var name:String;
   var cb:Callback<Outcome<Connection, Error>>;
