@@ -14,23 +14,13 @@ using tink.CoreApi;
 
 @:forward
 abstract Server(ServerObject) from ServerObject {
-  /**
-   * Attempts binding a server to a port.
-   * 
-   * Requires either combination:
-   * 
-   * - `-lib nodejs` (and `-js` of course)
-   * - `-lib tink_runloop` and one of `-neko` or `-java` or `-cpp`
-   */
-  @:require(neko || java || cpp || nodejs)
-  #if (neko || java || cpp)
-    @:require(tink_runloop)
-  #end
   static public function bind(port:Int):Promise<Server> {
-    #if ((neko || java || cpp) && tink_runloop)
-      return SysServer.bind(port);
+    #if java
+      return tink.tcp.servers.JavaServer.bind(port);
     #elseif nodejs
       return tink.tcp.servers.NodeServer.bind(port);
+    #elseif ((neko || java || cpp) && tink_runloop)
+      return SysServer.bind(port);
     #else
       return Future.sync(Failure(new Error('Not implemented on current platform')));//technically, this is unreachable
     #end

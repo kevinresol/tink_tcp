@@ -6,11 +6,7 @@ import tink.unit.*;
 class RunTests {
     public static function main() {
         Runner.run(TestBatch.make([
-            // new TestConnect(),
-            #if nodejs
-            // new TestAccept(),
-            new NodeTest(),
-            #end
+            new EchoTest(),
         ])).handle(Runner.exit);
         
         

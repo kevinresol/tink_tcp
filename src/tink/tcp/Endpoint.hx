@@ -21,9 +21,19 @@ abstract Endpoint(EndpointData) from EndpointData {
     this = {host: host, port: port, secure: secure}
   }
   
-  @:from static function fromPort(port:Int):Endpoint
+  @:from inline static function fromPort(port:Int):Endpoint
     return { port: port, host: '127.0.0.1' };
   
-  @:to public function toString():String
+  @:to public inline function toString():String
     return '${this.host}:${this.port}';
+    
+  #if java
+  @:from static inline function fromJavaSocketAddress(address:java.net.SocketAddress):Endpoint {
+    var inet:java.net.InetSocketAddress = cast address;
+    return {host: inet.getHostName(), port: inet.getPort()}
+  }
+  @:to inline function toJavaSocketAddress():java.net.SocketAddress {
+    return new java.net.InetSocketAddress(this.host, this.port);
+  }
+  #end
 }
