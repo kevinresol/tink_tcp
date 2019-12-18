@@ -26,11 +26,11 @@ abstract Server(ServerObject) from ServerObject {
   #if (neko || java || cpp)
     @:require(tink_runloop)
   #end
-  static public function bind(port:Int):Surprise<Server, Error> {
+  static public function bind(port:Int):Promise<Server> {
     #if ((neko || java || cpp) && tink_runloop)
       return SysServer.bind(port);
     #elseif nodejs
-      return NodeServer.bind(port);
+      return tink.tcp.servers.NodeServer.bind(port);
     #else
       return Future.sync(Failure(new Error('Not implemented on current platform')));//technically, this is unreachable
     #end
@@ -39,7 +39,7 @@ abstract Server(ServerObject) from ServerObject {
 
 interface ServerObject {
   var connected(get, never):Signal<Connection>;
-  function close():Void;
+  function close():Promise<Noise>;
 }
 
 #if (tink_runloop && (neko || java || cpp))
@@ -159,40 +159,5 @@ class SysServer extends RunloopServer {
   }
   
 }
-#elseif nodejs
-class NodeServer implements ServerObject {
-  var native:js.node.net.Server;
-  public var connected(get, null):Signal<Connection>;
-  
-  function get_connected()
-    return connected;
-    
-  public function new(server) {
-    this.native = server;
-    var t = Signal.trigger();
-    native.on('connection', function (c:js.node.net.Socket) {
-      t.trigger(Connection.wrap({ port: c.remotePort, host: c.remoteAddress }, c));
-    });
-    connected = t;
-  }
-  
-  public function close() {
-    native.close();
-  }
-  
-  static public function bind(port:Int) {
-    var server = js.node.Net.createServer();
-    server.listen(port);
-    return 
-      Future.async(function (cb) {
-        server.on('listening', function (_) {
-          cb(Success((new NodeServer(server) : Server)));
-        });
-        server.on('error', function (e) {
-          cb(Failure(new Error('Failed to open server on port $port because $e')));
-        });
-      });
-  }
 
-}
 #end

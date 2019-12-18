@@ -2,91 +2,65 @@ package;
 
 import haxe.Timer;
 import haxe.io.*;
-import tink.io.*;
+import tink.io.Sink;
 import tink.tcp.*;
 
+using tink.io.Source;
 using tink.CoreApi;
+using Lambda;
 
+@:asserts
 class NodeTest {
-  static var total = 10;
-  static var message = {
-    var accumulated = [for (i in 0...10000) 'Is it me you\'re looking for $i?'].join(' ');
-    var bytes = Bytes.ofString(accumulated);
-    bytes;
-  }
+  var total = 10;
+  var message = Bytes.ofString([for (i in 0...10000) 'Is it me you\'re looking for $i?'].join(' '));
+  var echoer = 'hello\r\n';
+  var client:Client = new tink.tcp.clients.NodeClient();
   
-  static function main() {
-    #if nodejs
-    haxe.Log.trace = function (d:Dynamic, ?p:haxe.PosInfos) {
-      js.Node.console.log('${p.fileName}:${p.lineNumber}', Std.string(d));
-    }
-    #end
-    Server.bind(3000).handle(function (o) {
-      var s = o.sure();
-      var start = Date.now().getTime();
-      sequential(function () {
-        s.close();
-        trace(Date.now().getTime() - start);
+  public function new() {}
+  
+  @:variant(this.sequential, this.message.length + this.echoer.length * this.total)
+  @:variant(this.parallel, (this.message.length + this.echoer.length) * this.total)
+  public function echo(fn:Int->Promise<Int>, expected:Int) {
+    return Server.bind(3000).next(server -> {
+      server.connected.handle(function (cnx) {
+        (echoer:RealSource).append(cnx.source).pipeTo(cnx.sink, {end: true}).eager();
       });
       
-      s.connected.handle(function (cnx) {
-        ('hello\r\n' : Source).append
-        (cnx.source).pipeTo(cnx.sink).handle(function (x) {
-          cnx.close();
+      fn(total)
+        .next(length -> {
+          asserts.assert(length == expected);
+          server.close();
+        })
+        .next(_ -> asserts.done());
+    });
+    
+  }
+  
+  function sequential(total:Int) {
+    var last:RealSource = message;
+    var incoming = [];
+    var promise = Promise.inSequence([for (i in 0...total)
+      Promise.lazy(() -> {
+        client.connect(3000).next(cnx -> {
+          last.pipeTo(cnx.sink, {end: true}).next(result -> {
+            last = cnx.source;
+          });
         });
-      });
-    });
-    
+      })
+    ]);
+    return promise
+      .next(_ -> last.all())
+      .next(chunk -> chunk.length);
   }
   
-  static function sequential(close) {
-    var last:Source = message;
-    
-    for (i in 0...total) {
-      
-      var cnx = Connection.establish(3000);
-      last.pipeTo(cnx.sink).handle(function (x) {
-        trace(x);
-        //last.close();
-        cnx.sink.close();
-        //cnx.close();
+  function parallel(total:Int) {
+    return Promise.inParallel([for (i in 0...total) {
+      client.connect(3000).next(cnx -> {
+        var write:RealSource = message;
+        write.pipeTo(cnx.sink, {end: true})
+          .next(_ -> cnx.source.all())
+          .next(chunk -> chunk.length);
       });
-      
-      last = cnx.source;
-    }
-    
-    var out = new BytesOutput();
-    
-    last.pipeTo(Sink.ofOutput('memory buffer', out)).handle(function (x) {
-      trace(x);
-      trace(out.getBytes().length);
-      close();
-    });
+    }]).next(v -> v.fold((v, total) -> total + v, 0));
   }
-  
-  static function parallel(close) {
-    
-    function dec() {
-      if (--total == 0) 
-        close();
-    }
-    
-    for (i in 0...total) {
-      var cnx = Connection.establish(3000);
-      var write = (message : Source);
-      write.pipeTo(cnx.sink).handle(function (x) {
-        //trace(x);
-        cnx.sink.close();
-      });
-      
-      
-      var out = new BytesOutput();
-      (cnx.source).pipeTo(Sink.ofOutput('memory buffer', out)).handle(function (y) {
-        trace(out.getBytes().length);
-        cnx.source.close();
-        dec();
-      });       
-    }
-  }
-  
 }
