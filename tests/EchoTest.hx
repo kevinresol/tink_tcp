@@ -55,7 +55,6 @@ class EchoTest {
     var promise = Promise.inSequence([for (i in 0...total)
       Promise.lazy(() -> {
         client.connect(3000).next(cnx -> {
-          // last.all().handle(o -> trace(i, o.sure().length));
           last.pipeTo(cnx.sink, {end: true}).next(result -> {
             last = cnx.source;
           });
